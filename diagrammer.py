@@ -2,15 +2,15 @@ from graphviz import Digraph
 from nltk import Tree
 from nlp_module import parse_sentence
 
-def generate_diagram(doc, style='dependency'):
+def generate_diagram(sentence, style='dependency'):
     """
     Generate an SVG diagram from the parsed sentence structure.
     Supports 'dependency' and 'reed-kellogg' styles.
     """
 
-    doc = parse_sentence(sentence)
+    doc = parse_sentence(sentence = sentence)
     sent = list(doc.sents)[0]
-    parse_tree = Tree.fromstring(sent._.parse_string)
+    parse_tree = Tree.fromstring(getattr(getattr(sent, '_'), 'parse_string'))
     dot = Digraph()
 
     if style == 'dependency':
@@ -22,20 +22,20 @@ def generate_diagram(doc, style='dependency'):
     elif style == 'reed-kellogg':
         dot.attr(rankdir='TB')  # Top-to-bottom layout
         # Process the sentence tree
-        process_S(dot, parse_tree)
+        process_s(dot, parse_tree)
 
     else:
         raise ValueError("Only 'dependency' and 'reed-kellogg' styles are currently supported.")
 
     return dot.pipe(format='svg').decode('utf-8')
 
-def process_S(dot, tree):
+def process_s(dot, tree):
     """Process a sentence (S) node, handling subject and predicate."""
     np = [child for child in tree if child.label() == 'NP'][0]  # Subject
     vp = [child for child in tree if child.label() == 'VP'][0]  # Predicate
     
-    subject_id = process_NP(dot, np)
-    verb_id = process_VP(dot, vp)
+    subject_id = process_np(dot, np)
+    verb_id = process_vp(dot, vp)
     
     separator_id = f"{id(tree)}_sep"
     dot.node(separator_id, '|', shape='plaintext')
@@ -43,7 +43,7 @@ def process_S(dot, tree):
     dot.edge(separator_id, verb_id, dir='none')
     dot.subgraph([('rank', 'same'), (subject_id,), (separator_id,), (verb_id,)])
 
-def process_NP(dot, tree):
+def process_np(dot, tree):
     """Process a noun phrase (NP), handling the head noun and modifiers."""
     # Find the head noun (last NN)
     head = [child for child in tree if child.label().startswith('NN')][-1]
@@ -62,7 +62,7 @@ def process_NP(dot, tree):
     
     return head_id
 
-def process_VP(dot, tree):
+def process_vp(dot, tree):
     """Process a verb phrase (VP), handling the verb and complements."""
     # Find the verb (VB*)
     verb = [child for child in tree if child.label().startswith('VB')][0]
@@ -74,15 +74,15 @@ def process_VP(dot, tree):
     complements = [child for child in tree if child.label() in ['NP', 'PP']]
     for comp in complements:
         if comp.label() == 'PP':
-            pp_id = process_PP(dot, comp)
+            pp_id = process_pp(dot, comp)
             dot.edge(verb_id, pp_id, constraint=False, style='dashed')  # Connect to preposition
         elif comp.label() == 'NP':
-            obj_id = process_NP(dot, comp)
+            obj_id = process_np(dot, comp)
             dot.edge(verb_id, obj_id, constraint=False, dir='none')  # Direct object
     
     return verb_id
 
-def process_PP(dot, tree):
+def process_pp(dot, tree):
     """Process a prepositional phrase (PP), handling preposition and object."""
     prep = [child for child in tree if child.label() == 'IN'][0]  # Preposition
     prep_label = ' '.join(prep.leaves())
@@ -90,9 +90,12 @@ def process_PP(dot, tree):
     dot.node(prep_id, prep_label, shape='plaintext')
     
     obj = [child for child in tree if child.label() == 'NP'][0]  # Object of preposition
-    obj_id = process_NP(dot, obj)
+    obj_id = process_np(dot, obj)
     
     dot.edge(prep_id, obj_id, dir='none')
     dot.subgraph([('rank', 'same'), (prep_id,), (obj_id,)])
     
     return prep_id
+
+if __name__ == '__main__':
+    generate_diagram("The cat sat on a mat.")
