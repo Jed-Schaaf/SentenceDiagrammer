@@ -41,7 +41,11 @@ def process_s(dot, tree):
     dot.node(separator_id, '|', shape='plaintext')
     dot.edge(subject_id, separator_id, dir='none')
     dot.edge(separator_id, verb_id, dir='none')
-    dot.subgraph([('rank', 'same'), (subject_id,), (separator_id,), (verb_id,)])
+    with dot.subgraph() as s:
+        s.attr(rank='same')
+        s.node(subject_id)
+        s.node(separator_id)
+        s.node(verb_id)
 
 def process_np(dot, tree):
     """Process a noun phrase (NP), handling the head noun and modifiers."""
@@ -57,7 +61,7 @@ def process_np(dot, tree):
         mod_label = ' '.join(mod.leaves())
         mod_id = f"{id(mod)}"
         dot.node(mod_id, mod_label, shape='plaintext')
-        dot.edge(head_id, mod_id, constraint=False, style='dashed')  # Slanted modifier line
+        dot.edge(head_id, mod_id, constraint="false", style='dashed')  # Slanted modifier line
         dot.edge(head_id, mod_id, style='invis')  # Position below
     
     return head_id
@@ -75,10 +79,10 @@ def process_vp(dot, tree):
     for comp in complements:
         if comp.label() == 'PP':
             pp_id = process_pp(dot, comp)
-            dot.edge(verb_id, pp_id, constraint=False, style='dashed')  # Connect to preposition
+            dot.edge(verb_id, pp_id, constraint="false", style='dashed')  # Connect to preposition
         elif comp.label() == 'NP':
             obj_id = process_np(dot, comp)
-            dot.edge(verb_id, obj_id, constraint=False, dir='none')  # Direct object
+            dot.edge(verb_id, obj_id, constraint="false", dir='none')  # Direct object
     
     return verb_id
 
@@ -93,9 +97,14 @@ def process_pp(dot, tree):
     obj_id = process_np(dot, obj)
     
     dot.edge(prep_id, obj_id, dir='none')
-    dot.subgraph([('rank', 'same'), (prep_id,), (obj_id,)])
+    with dot.subgraph() as s:
+        s.attr(rank='same')
+        s.node(prep_id)
+        s.node(obj_id)
     
     return prep_id
 
 if __name__ == '__main__':
-    generate_diagram("The cat sat on a mat.")
+    with open("test.svg", 'w') as of:
+        svg_doc = generate_diagram("The cat sat on a mat.", 'reed-kellogg')
+        of.write(svg_doc)
