@@ -51,23 +51,28 @@
 <body>
     <h1>Sentence Diagrammer</h1>
     <form method="post">
-        <label for="sentence">Enter a sentence:</label><br>
+        <label for="sentence">Enter sentences:</label><br>
         <textarea id="sentence" name="sentence" rows="4" cols="50" placeholder="Type your sentence here..."></textarea><br>
         <label for="style">Select diagramming style:</label>
         <select id="style" name="style">
             <option value="dependency">Dependency Tree</option>
             <option value="reed-kellogg">Reed-Kellogg</option>
         </select><br>
-        <input type="submit" value="Generate Diagram">
+        <input type="submit" value="Generate Diagrams">
     </form>
     
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
-    
-    {% if diagram %}
-        <h2>Diagram for: "{{ sentence }}"</h2>
-        <div class="diagram">{{ diagram | safe }}</div>
+    {% if results %}
+        <h2>Diagrams ({{ style }})</h2>
+        {% for result in results %}
+            <div style="margin-bottom: 20px;">
+                <h3>{{ result.sentence }}</h3>
+                {% if result.diagram %}
+                    <div class="diagram">{{ result.diagram | safe }}</div>
+                {% else %}
+                    <p class="error">{{ result.error }}</p>
+                {% endif %}
+            </div>
+        {% endfor %}
     {% endif %}
 </body>
 </html>

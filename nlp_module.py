@@ -9,9 +9,9 @@ except Exception:
     benepar.download("benepar_en3")
     nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
 
-def parse_sentence(sentence):
+def parse_sentences(sentence):
     """
     Parse the input sentence and return the spaCy Doc object containing its grammatical structure.
     """
     doc = nlp(sentence)
-    return doc
+    return [sent.text.strip() for sent in doc.sents if sent.text.strip()]
