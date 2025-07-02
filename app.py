@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from nlp_module import parse_sentences
+from nlp_module import split_sentences
 from diagrammer import generate_diagram
 from error_handling import check_input
 
@@ -14,7 +14,7 @@ def index():
         error = check_input(input_text)
         if error:
             return render_template('index.html', results=[{'sentence': input_text, 'error': error}])
-        sentences = parse_sentences(input_text)
+        sentences = split_sentences(input_text)
         results = []
         for sentence in sentences:
             try:

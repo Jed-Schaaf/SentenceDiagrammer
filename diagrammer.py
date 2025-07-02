@@ -1,6 +1,46 @@
+from io import StringIO
+import matplotlib.pyplot as plt
 from graphviz import Digraph
 from nltk import Tree
 from nlp_module import parse_sentence
+
+
+def draw_text(ax, text, x, y, ha='center', va='bottom'):
+    """
+    Draw text on the Matplotlib axis at specified coordinates.
+    Parameters:
+    - ax: Matplotlib axis object
+    - text: String to draw
+    - x, y: Coordinates for text placement
+    - ha: Horizontal alignment (default: 'center')
+    - va: Vertical alignment (default: 'bottom')
+    """
+    text_ax = ax.text(x, y, text, ha=ha, va=va)
+    width = text_ax.figure.get_figwidth()
+    ax.plot([x - width / 2, x + width / 2], [y, y], linestyle='-', color='black')
+
+
+def draw_line(ax, start_pos, end_pos, line_style='solid', color='black'):
+    """
+    Draw a line on the Matplotlib axis between two points.
+    Parameters:
+    - ax: Matplotlib axis object
+    - start_x, start_y: Starting coordinates of the line
+    - end_x, end_y: Ending coordinates of the line
+    - line_style: Type of line ('solid' or 'dashed')
+    - color: Line color (default: 'black')
+    """
+    if line_style == 'solid':
+        linestyle = '-'
+    elif line_style == 'dashed':
+        linestyle = '--'
+    else:
+        raise ValueError(f"Unsupported line style: {line_style}")
+    start_x = start_pos[0]
+    start_y = start_pos[1]
+    end_x = end_pos[0]
+    end_y = end_pos[1]
+    ax.plot([start_x, end_x], [start_y, end_y], linestyle=linestyle, color=color)
 
 
 def generate_diagram(sentence, style='dependency'):
@@ -8,184 +48,206 @@ def generate_diagram(sentence, style='dependency'):
     Generate an SVG diagram from the parsed sentence structure.
     Supports 'dependency' and 'reed-kellogg' styles.
     """
-    doc = parse_sentence(sentence=sentence)
-    sent = list(doc.sents)[0]
-    parse_tree = Tree.fromstring(getattr(getattr(sent, '_'), 'parse_string'))
-    dot = Digraph()
+    doc = parse_sentence(sentence)
 
     if style == 'dependency':
+        dot = Digraph()
         for token in doc:
             dot.node(str(token.i), token.text)
             if token.head != token:
                 dot.edge(str(token.head.i), str(token.i), label=token.dep_)
+        retval = dot.pipe(format='svg').decode('utf-8')
     elif style == 'reed-kellogg':
-        dot.attr(rankdir='LR')  # Left-to-right layout for horizontal alignment
-        process_s(dot, parse_tree)
+        sent = list(doc.sents)[0]
+        parse_tree = Tree.fromstring(getattr(getattr(sent, '_'), 'parse_string'))
+        fig, ax = plt.subplots(figsize=(12, 8))
+        ax.set_xlim(0, 150)
+        ax.set_ylim(0, 150)
+        ax.axis('off')
+        process_s(ax, parse_tree, x=10, y=10)
+        plt.gca().invert_yaxis()  # Invert y-axis to match top-to-bottom layout
+        svg_buffer = StringIO()
+        plt.savefig(svg_buffer, format='svg')
+        plt.close(fig)
+        retval = svg_buffer.getvalue()
     else:
         raise ValueError("Only 'dependency' and 'reed-kellogg' styles are currently supported.")
 
-    return dot.pipe(format='svg').decode('utf-8')
+    return retval
 
 
-def process_s(dot, tree):
-    """Process a sentence (S) node, handling subject and predicate."""
-    np = [child for child in tree if child.label() == 'NP'][0]  # Subject
-    vp = [child for child in tree if child.label() == 'VP'][0]  # Predicate
+def process_s(ax, tree, x, y):
+    """Process a sentence (S) node, handling subject, predicate, and coordinated/subordinate clauses."""
+    # Handle coordinated sentences (e.g., S -> S CC S)
+    if any(child.label() == 'CC' for child in tree):
+        s_nodes = [child for child in tree if child.label() == 'S']
+        cc = [child for child in tree if child.label() == 'CC'][0]
+        cc_label = ' '.join(cc.leaves())
+        total_width = 0
+        for i, s_node in enumerate(s_nodes):
+            width, _ = process_s(ax, s_node, x + total_width, y)
+            total_width += width + 10
+            if i < len(s_nodes) - 1:
+                draw_text(ax, cc_label, x + total_width - 5, y)
+                total_width += len(cc_label) * 1.5 + 5
+        return total_width, 10
+    else:
+        np = [child for child in tree if child.label() == 'NP'][0]  # Subject
+        vp = [child for child in tree if child.label() == 'VP'][0]  # Predicate
+        subject_width, subject_height = process_np(ax, np, x, y, is_subject=True)
+        separator_x = x + subject_width + 2
+        draw_line(ax, [separator_x, y + 2], [separator_x, y - 12])  # Vertical separator
+        predicate_x = separator_x + 2
+        predicate_width, predicate_height = process_vp(ax, vp, predicate_x, y)
+        # Handle subordinate clauses (SBAR)
+        sbar_nodes = [child for child in tree if child.label() == 'SBAR']
+        if sbar_nodes:
+            sbar_x = predicate_x + predicate_width + 2
+            for sbar in sbar_nodes:
+                sbar_width, sbar_height = process_sbar(ax, sbar, sbar_x, y + 20)
+                draw_line(ax, [predicate_x + predicate_width / 2, y], [sbar_x, y + 20], line_style='dashed')
+                sbar_x += sbar_width + 2
+        return subject_width + predicate_width + 4, max(subject_height, predicate_height)
 
-    subject_id = process_np(dot, np, is_subject=True)
-    predicate_id = process_vp(dot, vp)
 
-    separator_id = f"{id(tree)}_sep"
-    dot.node(separator_id, '|', shape='plaintext')
-
-    # Align subject, separator, and predicate horizontally
-    dot.edge(subject_id, separator_id, style='invis')
-    dot.edge(separator_id, predicate_id, style='invis')
-    with dot.subgraph() as s:
-        s.attr(rank='same')
-        s.node(subject_id)
-        s.node(separator_id)
-        s.node(predicate_id)
-
-
-def process_np(dot, tree, is_subject=False):
-    """Process a noun phrase (NP), handling the head noun, modifiers, and compounds."""
-    # Handle compound subjects
-    if len([child for child in tree if child.label().startswith('NN')]) > 1 and is_subject:
-        return process_compound(dot, tree, 'NP')
-
-    head = [child for child in tree if child.label().startswith('NN')][-1]
+def process_np(ax, tree, x, y, is_subject=False):
+    """Process a noun phrase (NP), handling head noun/pronoun, determiners, and modifiers."""
+    # Handle coordinated NPs (e.g., NP -> NP CC NP)
+    if any(child.label() == 'CC' for child in tree):
+        np_nodes = [child for child in tree if child.label() == 'NP']
+        cc = [child for child in tree if child.label() == 'CC'][0]
+        cc_label = ' '.join(cc.leaves())
+        total_width = height = 0
+        for i, np_node in enumerate(np_nodes):
+            width, height = process_np(ax, np_node, x + total_width, y, is_subject)
+            total_width += width + 5
+            if i < len(np_nodes) - 1:
+                draw_text(ax, cc_label, x + total_width - 2.5, y)
+                total_width += len(cc_label) * 1.5 + 5
+        return total_width, height
+    # Find head (noun or pronoun)
+    head = None
+    for child in tree:
+        if child.label().startswith('NN') or child.label() in ['PRP', 'PRP$']:
+            head = child
+            break
+    if not head:
+        head = tree  # Fallback to tree root if no noun/pronoun found
     head_label = ' '.join(head.leaves())
-    head_id = f"{id(head)}"
-    dot.node(head_id, head_label, shape='plaintext')
+    head_width = len(head_label) * 1.5  # Approximate width
+    draw_text(ax, head_label, x + head_width / 2, y)
+    # Process determiners (DT, PDT, WDT, CD) and adjectives (JJ)
+    mod_y = y + 5
+    mod_x = x
+    for child in tree:
+        if child.label() in ['DT', 'PDT', 'WDT', 'CD']:  # Determiners
+            det_label = ' '.join(child.leaves())
+            draw_text(ax, det_label, mod_x, mod_y)
+            draw_line(ax, [x + head_width / 2, y], [mod_x, mod_y], line_style='dashed')
+            mod_x += len(det_label) * 1.5 + 2
+        elif child.label() == 'JJ':  # Adjectives
+            adj_label = ' '.join(child.leaves())
+            draw_text(ax, adj_label, mod_x, mod_y)
+            draw_line(ax, [x + head_width / 2, y], [mod_x, mod_y], line_style='dashed')
+            mod_x += len(adj_label) * 1.5 + 2
+        elif child.label() == 'RB':  # Adverbs modifying adjectives
+            adv_label = ' '.join(child.leaves())
+            draw_text(ax, adv_label, mod_x, mod_y + 5)
+            draw_line(ax, [mod_x + 5, mod_y + 1], [mod_x, mod_y + 5 + 1], line_style='dashed')
+            mod_x += len(adv_label) * 1.5 + 2
+    return head_width, 10
 
-    # Process adjectives (JJ)
-    modifiers = [child for child in tree if child.label() == 'JJ']
-    for mod in modifiers:
-        mod_label = ' '.join(mod.leaves())
-        mod_id = f"{id(mod)}"
-        dot.node(mod_id, mod_label, shape='plaintext')
-        # Slanted line: upper left to lower right
-        dot.edge(head_id, mod_id, style='dashed', dir='none', constraint='false')
 
-    return head_id
-
-
-def process_vp(dot, tree):
-    """Process a verb phrase (VP), handling verb, objects, and complements."""
-    verb = [child for child in tree if child.label().startswith('VB')][0]
-    verb_label = ' '.join(verb.leaves())
-    verb_id = f"{id(verb)}"
-    dot.node(verb_id, verb_label, shape='plaintext')
-
-    # Process complements (NP, PP, or subject complement)
+def process_vp(ax, tree, x, y):
+    """Process a verb phrase (VP), handling verb, auxiliaries, particles, and complements."""
+    # Handle auxiliary verbs (MD, VB*) and main verb
+    verbs = [child for child in tree if child.label().startswith('VB') or child.label() == 'MD']
+    particles = [child for child in tree if child.label() == 'RP']
+    verb_label = ' '.join(' '.join(v.leaves()) for v in verbs + particles)
+    verb_width = len(verb_label) * 1.5  # Approximate width
+    draw_text(ax, verb_label, x + verb_width / 2, y)
+    # Process complements (NP, PP, ADJP) and adverbs
     complements = [child for child in tree if child.label() in ['NP', 'PP', 'ADJP']]
-    for comp in complements:
+    comp_x = x + verb_width + 2
+    for i, comp in enumerate(complements):
         if comp.label() == 'NP':
-            # Check for indirect object (simplified: second NP after verb)
-            if 'dobj' in [token.dep_ for token in parse_sentence(' '.join(tree.leaves()))] and complements.index(
-                    comp) == 0:
-                ind_obj_id = process_np(dot, comp)
-                dot.edge(verb_id, ind_obj_id, style='dashed', constraint='false')
-            else:  # Direct object
-                obj_id = process_np(dot, comp)
-                separator_id = f"{verb_id}_{obj_id}_sep"
-                dot.node(separator_id, '|', shape='plaintext')
-                dot.edge(verb_id, separator_id, style='invis')
-                dot.edge(separator_id, obj_id, style='invis')
-                with dot.subgraph() as s:
-                    s.attr(rank='same')
-                    s.node(verb_id)
-                    s.node(separator_id)
-                    s.node(obj_id)
+            obj_width, obj_height = process_np(ax, comp, comp_x, y)
+            separator_x = comp_x - 1
+            draw_line(ax, [separator_x, y], [separator_x, y - 10])  # Vertical separator
+            comp_x += obj_width + 2
         elif comp.label() == 'PP':
-            pp_id = process_pp(dot, comp)
-            dot.edge(verb_id, pp_id, style='dashed', constraint='false')
-        elif comp.label() == 'ADJP':  # Subject complement
-            comp_id = process_adjp(dot, comp)
-            slant_id = f"{verb_id}_{comp_id}_slant"
-            dot.node(slant_id, '/', shape='plaintext')
-            dot.edge(verb_id, slant_id, style='invis')
-            dot.edge(slant_id, comp_id, style='invis')
-            with dot.subgraph() as s:
-                s.attr(rank='same')
-                s.node(verb_id)
-                s.node(slant_id)
-                s.node(comp_id)
+            pp_width, pp_height = process_pp(ax, comp, comp_x, y + 10)
+            draw_line(ax, [x + verb_width / 2, y], [comp_x, y - 10], line_style='dashed')
+            comp_x += pp_width + 2
+        elif comp.label() == 'ADJP':
+            adjp_width, adjp_height = process_adjp(ax, comp, comp_x, y)
+            draw_line(ax, [x + verb_width / 2, y], [comp_x, y - 10])  # Horizontal line
+            draw_text(ax, '/', x + verb_width / 2 + 1, y)
+            comp_x += adjp_width + 2
 
     # Process adverbs (RB)
     adverbs = [child for child in tree if child.label() == 'RB']
-    for adv in adverbs:
+    adv_y = y + 5
+    for i, adv in enumerate(adverbs):
         adv_label = ' '.join(adv.leaves())
-        adv_id = f"{id(adv)}"
-        dot.node(adv_id, adv_label, shape='plaintext')
-        dot.edge(verb_id, adv_id, style='dashed', dir='none', constraint='false')
+        adv_x = x + verb_width + i * 10
+        draw_text(ax, adv_label, adv_x, adv_y)
+        draw_line(ax, [x + verb_width / 2, y], [adv_x, adv_y], line_style='dashed')
 
-    return verb_id
+    return verb_width, 10  # Approximate height
 
 
-def process_pp(dot, tree):
+def process_pp(ax, tree, x, y):
     """Process a prepositional phrase (PP), handling preposition and object."""
     prep = [child for child in tree if child.label() == 'IN'][0]
     prep_label = ' '.join(prep.leaves())
-    prep_id = f"{id(prep)}"
-    dot.node(prep_id, prep_label, shape='plaintext')
+    draw_text(ax, prep_label, x, y)
 
     obj = [child for child in tree if child.label() == 'NP'][0]
-    obj_id = process_np(dot, obj)
+    obj_x = x + 5
+    obj_width, obj_height = process_np(ax, obj, obj_x, y)
 
-    # Slanted preposition line, horizontal object
-    dot.edge(prep_id, obj_id, style='dashed', dir='none', constraint='false')
-    with dot.subgraph() as s:
-        s.attr(rank='same')
-        s.node(prep_id)
-        s.node(obj_id)
+    # Slanted preposition line
+    draw_line(ax, [x, y], [obj_x, obj_height], line_style='dashed')
 
-    return prep_id
+    return obj_x + obj_width - x, 10  # Approximate width and height
 
 
-def process_adjp(dot, tree):
-    """Process an adjective phrase (ADJP) as a subject complement."""
+def process_adjp(ax, tree, x, y):
+    """Process an adjective phrase (ADJP), handling adjectives and adverbs."""
     head = [child for child in tree if child.label() == 'JJ'][-1]
     head_label = ' '.join(head.leaves())
-    head_id = f"{id(head)}"
-    dot.node(head_id, head_label, shape='plaintext')
-    return head_id
+    head_width = len(head_label) * 1.5  # Approximate width
+    draw_text(ax, head_label, x + head_width / 2, y)
+    # Process adverbs modifying adjectives
+    adverbs = [child for child in tree if child.label() == 'RB']
+    mod_y = y + 5
+    mod_x = x
+    for adv in adverbs:
+        adv_label = ' '.join(adv.leaves())
+        draw_text(ax, adv_label, mod_x, mod_y)
+        draw_line(ax, [x + head_width / 2, y], [mod_x, mod_y], line_style='dashed')
+        mod_x += len(adv_label) * 1.5 + 2
+    return head_width, 10  # Approximate height
 
 
-def process_compound(dot, tree, phrase_type):
-    """Process compound elements (e.g., compound subjects or predicates)."""
-    heads = [child for child in tree if child.label().startswith('NN' if phrase_type == 'NP' else 'VB')]
-    conj = [child for child in tree if child.label() == 'CC'][0] if 'CC' in [child.label() for child in tree] else None
-
-    head_ids = []
-    for head in heads:
-        head_label = ' '.join(head.leaves())
-        head_id = f"{id(head)}"
-        dot.node(head_id, head_label, shape='plaintext')
-        head_ids.append(head_id)
-
+def process_sbar(ax, tree, x, y):
+    """Process a subordinate clause (SBAR), handling conjunction and embedded sentence."""
+    conj = [child for child in tree if child.label() == 'IN']
+    conj_label = ' '.join(conj[0].leaves()) if conj else ''
+    s_node = [child for child in tree if child.label() == 'S'][0]
     if conj:
-        conj_label = ' '.join(conj.leaves())
-        conj_id = f"{id(conj)}"
-        dot.node(conj_id, conj_label, shape='plaintext')
-
-        # Split horizontal line with conjunction
-        for i, head_id in enumerate(head_ids):
-            if i == 0:
-                dot.edge(head_id, conj_id, style='invis')
-            else:
-                dot.edge(conj_id, head_id, style='invis')
-        with dot.subgraph() as s:
-            s.attr(rank='same')
-            for head_id in head_ids:
-                s.node(head_id)
-            s.node(conj_id)
-
-    return head_ids[0]  # Return first head for connection purposes
+        draw_text(ax, conj_label, x, y)
+        s_x = x + len(conj_label) * 1.5 + 2
+    else:
+        s_x = x
+    width, height = process_s(ax, s_node, s_x, y)
+    if conj:
+        draw_line(ax, [x, y], [s_x, y], line_style='dashed')
+    return width + (len(conj_label) * 1.5 + 2 if conj else 0), height
 
 
 if __name__ == "__main__":
     with open("test.svg", 'w') as of:
-        svg_doc = generate_diagram("The big cat quickly chased the small mouse.", 'reed-kellogg')
+        svg_doc = generate_diagram("The big red cat quickly chased the small gray mouse.", 'reed-kellogg')
         of.write(svg_doc)
