@@ -1,3 +1,5 @@
+"""Checks for errors in the user-submitted sentence."""
+
 def check_input(text):
     """
     Validate the input sentence.

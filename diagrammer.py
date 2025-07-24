@@ -1,4 +1,7 @@
+"""Diagramming algorithms to produce dependency graphs
+and Reed-Kellogg diagrams of submitted sentences"""
 from io import StringIO
+import locale as loc
 import matplotlib.pyplot as plt
 from graphviz import Digraph
 from nltk import Tree
@@ -17,7 +20,7 @@ def generate_diagram(sentence, style='dependency'):
             if token.head != token:
                 dot.edge(str(token.head.i), str(token.i), label=token.dep_)
         return dot.pipe(format='svg').decode('utf-8')
-    elif style == 'reed-kellogg':
+    if style == 'reed-kellogg':
         sent = list(doc.sents)[0]
         parse_tree = Tree.fromstring(getattr(getattr(sent, '_'), 'parse_string'))
         fig, ax = plt.subplots(figsize=(12, 12))
@@ -30,8 +33,7 @@ def generate_diagram(sentence, style='dependency'):
         plt.savefig(svg_buffer, format='svg')
         plt.close(fig)
         return svg_buffer.getvalue()
-    else:
-        raise ValueError("Only 'dependency' and 'reed-kellogg' styles are currently supported.")
+    raise ValueError("Only 'dependency' and 'reed-kellogg' styles are currently supported.")
 
 
 def draw_line(ax, start_pos, end_pos, line_style='solid', color='black'):
@@ -73,9 +75,7 @@ def draw_text(ax, text, x, y, ha='center', va='bottom', rotate=False, head_y=Non
     # Calculate line from text to head's baseline
     #theta = np.radians(45)
     x1 = x - width / 2
-    y1 = y + 1
     x2 = x + width / 2
-    y2 = y + 1
     if rotate and head_y is not None:
         # Rotate endpoints
         x1_rot = x #+ (x1 - x) * np.cos(theta) - (y1 - y) * np.sin(theta)
@@ -126,7 +126,7 @@ def process_modifier(ax, node, x, y, head_y):
         text_y = y + 10
         draw_text(ax, mod_label, text_x, text_y, rotate=True, head_y=head_y)
         return 10
-    elif node.label() == 'PP':
+    if node.label() == 'PP':
         # prepositional phrases
         prep = [child for child in node if child.label() == 'IN'][0]
         prep_label = ' '.join(prep.leaves())
@@ -136,7 +136,7 @@ def process_modifier(ax, node, x, y, head_y):
         np = [child for child in node if child.label() == 'NP'][0]
         np_width, _ = process_np(ax, np, x+10, y+10)
         return np_width + 10  # Total width includes preposition and NP
-    elif node.label() in ['ADJP', 'ADVP']:
+    if node.label() in ['ADJP', 'ADVP']:
         # adjectival and adverbial phrases
         total_width = 10
         if node.label() == 'ADJP':
@@ -174,7 +174,8 @@ def print_sentence_tree(ax, tree, x, y):
 
 
 def process_s(ax, tree, x, y):
-    """Process a sentence (S) node, handling subject, predicate, and coordinated/subordinate clauses."""
+    """Process a sentence (S) node, handling subject,
+    predicate, and coordinated/subordinate clauses."""
     #print_sentence_tree(ax, tree, 0, 40)
     # Handle coordinated sentences (e.g., S -> S CC S)
     if any(child.label() == 'CC' for child in tree):
@@ -188,34 +189,36 @@ def process_s(ax, tree, x, y):
             total_width = max(total_width, width)
             total_height += height
             if i < len(s_nodes) - 1:
-                w, h = draw_text(ax, cc_label, x, y + i*30 + 15)
-                draw_line(ax, [x - w/2, y + i*30], [x - w/2, y + i*30 + 15], line_style='dashed')
-                draw_line(ax, [x + w/2, y + i*30 + 15], [x + w/2, y + i*30 + 30], line_style='dashed')
+                w, _ = draw_text(ax, cc_label, x, y + i*30 + 15)
+                draw_line(ax, [x - w/2, y + i*30],
+                          [x - w/2, y + i*30 + 15], line_style='dashed')
+                draw_line(ax, [x + w/2, y + i*30 + 15],
+                          [x + w/2, y + i*30 + 30], line_style='dashed')
         return total_width, total_height
-    else:
-        np = [child for child in tree if child.label() == 'NP'][0]
-        vp = [child for child in tree if child.label() == 'VP'][0]
-        subject_width, subject_height = process_np(ax, np, x, y)
-        separator_x = x + subject_width + 2
-        draw_line(ax, [separator_x, y + 3], [separator_x, y - 6])
-        draw_line(ax, [separator_x-2, y], [separator_x+2, y])
-        predicate_x = separator_x + 5
-        pred_mod_width = 5
-        for child in tree:
-            if child.label() == 'ADVP':
-                adv_width = process_modifier(ax, child, predicate_x+pred_mod_width, y, y)
-                pred_mod_width += adv_width
-        draw_line(ax, [separator_x, y], [predicate_x+pred_mod_width, y])
-        predicate_width, predicate_height = process_vp(ax, vp, predicate_x+pred_mod_width, y)
-        # Handle subordinate clauses (SBAR)
-        sbar_nodes = [child for child in tree if child.label() == 'SBAR']
-        if sbar_nodes:
-            sbar_x = predicate_x + predicate_width + 2
-            for sbar in sbar_nodes:
-                sbar_width, sbar_height = process_sbar(ax, sbar, sbar_x, y + 20)
-                draw_line(ax, [predicate_x + predicate_width / 2, y], [sbar_x, y + 20], line_style='dashed')
-                sbar_x += sbar_width + 2
-        return subject_width + predicate_width + 4, max(subject_height, predicate_height)
+    np = [child for child in tree if child.label() == 'NP'][0]
+    vp = [child for child in tree if child.label() == 'VP'][0]
+    subject_width, subject_height = process_np(ax, np, x, y)
+    separator_x = x + subject_width + 2
+    draw_line(ax, [separator_x, y + 3], [separator_x, y - 6])
+    draw_line(ax, [separator_x-2, y], [separator_x+2, y])
+    predicate_x = separator_x + 5
+    pred_mod_width = 5
+    for child in tree:
+        if child.label() == 'ADVP':
+            adv_width = process_modifier(ax, child, predicate_x+pred_mod_width, y, y)
+            pred_mod_width += adv_width
+    draw_line(ax, [separator_x, y], [predicate_x+pred_mod_width, y])
+    predicate_width, predicate_height = process_vp(ax, vp, predicate_x+pred_mod_width, y)
+    # Handle subordinate clauses (SBAR)
+    sbar_nodes = [child for child in tree if child.label() == 'SBAR']
+    if sbar_nodes:
+        sbar_x = predicate_x + predicate_width + 2
+        for sbar in sbar_nodes:
+            sbar_width, _ = process_sbar(ax, sbar, sbar_x, y + 20)
+            draw_line(ax, [predicate_x + predicate_width / 2, y],
+                      [sbar_x, y + 20], line_style='dashed')
+            sbar_x += sbar_width + 2
+    return subject_width + predicate_width + 4, max(subject_height, predicate_height)
 
 
 def process_np(ax, tree, x, y):
@@ -229,12 +232,14 @@ def process_np(ax, tree, x, y):
         n_nodes = len(np_nodes)
         total_height = n_nodes * 8
         for i, np_node in enumerate(np_nodes):
-            width, height = process_np(ax, np_node, x, y + i*8 - total_height/2)
+            width, _ = process_np(ax, np_node, x, y + i*8 - total_height/2)
             total_width = max(total_width, width)
             if i < len(np_nodes) - 1:
                 w, _ = draw_text(ax, cc_label, x, y + i*8 - total_height/2)
-                draw_line(ax, [x - w/2, y + i*8 - total_height/2], [x - w/2, y + i*8 - total_height/2 + 4], line_style='dashed')
-                draw_line(ax, [x + w/2, y + i*8 - total_height/2 + 4], [x + w/2, y + i*8 - total_height/2 + 8], line_style='dashed')
+                draw_line(ax, [x - w/2, y + i*8 - total_height/2],
+                          [x - w/2, y + i*8 - total_height/2 + 4], line_style='dashed')
+                draw_line(ax, [x + w/2, y + i*8 - total_height/2 + 4],
+                          [x + w/2, y + i*8 - total_height/2 + 8], line_style='dashed')
         return total_width, total_height
     # Find head (noun or pronoun)
     head_width = 5
@@ -262,7 +267,7 @@ def process_np(ax, tree, x, y):
             mod_width = process_modifier(ax, child, mod_x, y, y)
             total_mod_width += mod_width
             mod_x += mod_width
-    
+
     baseline_start = x
     baseline_end = baseline_start + max(head_width, total_mod_width)
     head_x = (baseline_start + baseline_end) / 2
@@ -289,7 +294,7 @@ def process_vp(ax, tree, x, y):
             mod_width = process_modifier(ax, child, mod_x, y, y)
             total_mod_width += mod_width
             mod_x += mod_width
-    
+
     verb_baseline_start = x
     verb_baseline_end = verb_baseline_start + max(verb_width, total_mod_width)
 
@@ -341,7 +346,7 @@ def process_pp(ax, tree, x, y, head_y):
     obj_x = x + slant_length
     obj_width, _ = process_np(ax, obj, obj_x, y)
     draw_line(ax, [prep_x, prep_y], [obj_x, y], line_style='dashed')
-    return 20, 10#obj_width + 5, 10
+    return obj_width, 10
 
 def process_indirect_object(ax, tree, x, y, head_y):
     """Process an indirect object."""
@@ -365,7 +370,7 @@ def process_adjp(ax, tree, x, y):
             mod_width = process_modifier(ax, child, mod_x, y, y)
             total_mod_width += mod_width
             mod_x += mod_width
-    
+
     baseline_start = x
     baseline_end = baseline_start + max(head_width, total_mod_width)
     head_x = (baseline_start + baseline_end) / 2
@@ -391,11 +396,12 @@ def process_sbar(ax, tree, x, y):
 
 
 if __name__ == "__main__":
-    with open("test.svg", 'w') as of:
+    with open("test.svg", 'w', encoding=loc.getpreferredencoding()) as of:
         svg_doc = generate_diagram(
             #"He walked and I rode and she spun.",
             #"She baked me a cake.",
-            "The very big red cat quickly chased the small gray mouse into the hole in the wall very quietly.",
+            "The very big red cat quickly chased "
+            "the small gray mouse into the hole in the wall very quietly.",
             #"To know him is to love him.",
             #"The little girl is very very very awful on her violin.",
             'reed-kellogg')

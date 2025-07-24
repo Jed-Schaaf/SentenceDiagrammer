@@ -1,3 +1,4 @@
+"""Web app to accept user-entered sentences and produce sentence graphs from them"""
 from flask import Flask, render_template, request
 from nlp_module import split_sentences
 from diagrammer import generate_diagram
@@ -7,6 +8,9 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    """Main page for web app.
+    Displays web controls to accept user input and
+    pass it to the parser and diagrammer."""
     if request.method == 'POST':
         input_text = request.form.get('sentence')
         style = request.form.get('style', 'dependency')  # Default to dependency tree

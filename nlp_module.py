@@ -1,3 +1,4 @@
+"""Loads Natural Language Processor to parse sentences"""
 import spacy
 import benepar
 
@@ -5,7 +6,7 @@ import benepar
 nlp = spacy.load("en_core_web_sm")
 try:
     nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
-except Exception:
+except ValueError:
     benepar.download("benepar_en3")
     nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
 
