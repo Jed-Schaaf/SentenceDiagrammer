@@ -2,11 +2,19 @@
 
 SentenceDiagrammer is a web-based tool for generating **dependency diagrams** and **Reed-Kellogg diagrams** of sentences. It leverages natural language processing (NLP) with spaCy and benepar to parse sentences and visualize their grammatical structure using GraphViz and Matplotlib, making it a valuable resource for linguists, educators, and language enthusiasts.
 
-## Features
+This app was developed using Grok's automatic code generation and manual review and corrections. A full transcript of the prompts and replies can be found [here](https://grok.com/share/c2hhcmQtMg%3D%3D_af5ea4ca-65d7-4f06-8e07-ee5a016a3f5f).
+
+## Current Features
 - **Dependency Diagrams**: Illustrate syntactic dependencies between words in a sentence.
 - **Reed-Kellogg Diagrams**: Display traditional sentence diagrams showing grammatical components.
 - Built with Flask for an accessible web interface.
-- Supports complex sentence structures, including coordinated clauses and modifiers.
+- Supports declarative sentence structures with adjective and adverb modifiers, prepositional phrases, and partial support for coordinated and dependent clauses and coordinated nouns and verbs.
+
+## Future Enhancements
+- Additional sentence types/structures, including imperative, interrogative, and exclamatory sentences.
+- Better spacing and structure for the generated graphs.
+- More complete handling of all coordinating conjunction structures.
+- Better error handling and sentence validation.
 
 ## Installation
 
@@ -88,9 +96,10 @@ We welcome contributions to enhance SentenceDiagrammer! To contribute:
 ### Development Notes
 - The project uses `nlp_module.py` for sentence parsing with spaCy and benepar.
 - `diagrammer.py` handles diagram generation, with extensive logic for Reed-Kellogg diagrams.
-- Test your changes locally with `python app.py` before submitting.
+- Test your app changes locally with `python app.py` before submitting.
+  - Check diagramming updates with `python diagrammer.py`. Example sentences are included at the bottom of the file along with test code.
 
 ## Troubleshooting
 - **GraphViz Not Found**: Ensure GraphViz is installed and in your PATH.
 - **Module Errors**: Verify all dependencies are installed correctly from `requirements.txt`.
-- **Diagram Issues**: Complex sentences may require debugging in `diagrammer.py`.
+- **Diagram Issues**: Complex sentences may require further development or debugging in `diagrammer.py`.
